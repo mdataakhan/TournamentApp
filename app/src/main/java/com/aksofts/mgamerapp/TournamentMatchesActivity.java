@@ -1,18 +1,7 @@
 package com.aksofts.mgamerapp;
 
-import android.content.Intent;
-import android.content.SharedPreferences;
-import android.icu.text.SymbolTable;
-import android.os.AsyncTask;
 import android.os.Bundle;
-
-import androidx.activity.EdgeToEdge;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.graphics.Insets;
-import androidx.core.view.ViewCompat;
-import androidx.core.view.WindowInsetsCompat;
-
-import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -22,17 +11,15 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.android.volley.Request;
+import com.android.volley.RequestQueue;
+import com.android.volley.toolbox.JsonArrayRequest;
+import com.android.volley.toolbox.Volley;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.io.UnsupportedEncodingException;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.net.URLEncoder;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -62,103 +49,100 @@ public class TournamentMatchesActivity extends AppCompatActivity {
         upcomingTab = findViewById(R.id.upcoming_tab);
         resultsTab = findViewById(R.id.results_tab);
 
-        // Sample data (replace with your actual data source)
+        // Initialize matches list
         matchesItemList = new ArrayList<>();
 
-        // Set up tab click listeners (optional, if you want to implement tab functionality)
+        // Set up tab click listeners (optional, for filtering)
         ongoingTab.setOnClickListener(v -> {
-            // Handle ongoing tab click (e.g., filter data)
+            // TODO: Implement filtering for ongoing matches
         });
 
         upcomingTab.setOnClickListener(v -> {
-            // Handle upcoming tab click (e.g., filter data)
+            // TODO: Implement filtering for upcoming matches
         });
 
         resultsTab.setOnClickListener(v -> {
-            // Handle results tab click (e.g., filter data)
+            // TODO: Implement filtering for results
         });
 
-        // Find and handle the back button click
-        findViewById(R.id.header).findViewById(R.id.header).setOnClickListener(v -> onBackPressed());
+        // Handle back button
+        View header = findViewById(R.id.header);
+        if (header != null) {
+            header.setOnClickListener(v -> onBackPressed());
+        }
         if (getSupportActionBar() != null) {
             getSupportActionBar().setDisplayHomeAsUpEnabled(true);
             getSupportActionBar().setDisplayShowTitleEnabled(false);
         }
 
+        // Fetch tournament matches
         fetchTournamentMatches();
     }
 
-
-
     private void fetchTournamentMatches() {
-        String get_user_data_qry = getResources().getString(R.string.app_url) + "/app-apis/tournaments/all-tournaments-matches.php?id=1";
+        String apiUrl = getResources().getString(R.string.app_url) + "/app-apis/tournaments/all-tournaments-matches.php?id=1";
 
-        String finalget_user_data_qry = get_user_data_qry;
-        class dbprocess extends AsyncTask<String, Void, String> implements com.aksofts.mgamerapp.dbprocess {
-            @Override
-            protected void onPostExecute(String data) {
-                try {
-                    JSONArray response = new JSONArray(data);
+        RequestQueue queue = Volley.newRequestQueue(this);
 
-                    for (int i = 0; i < response.length(); i++) {
-                        JSONObject obj = response.getJSONObject(i);
+        JsonArrayRequest request = new JsonArrayRequest(Request.Method.GET, apiUrl, null,
+                response -> {
+                    try {
+                        Log.d("TournamentMatchesActivity", "API Response: " + response.toString());
+                        matchesItemList.clear(); // Clear existing data
 
-                        String matchName = obj.getString("match_name");
-                        String matchTime = obj.getString("match_time");
-                        int entryFee = obj.getInt("entry_fee");
-                        int winPrize = obj.getInt("win_prize");
-                        int perKill = obj.getInt("per_kill");
-                        String type = obj.getString("type");
-                        String map = obj.getString("MAP");
-                        String banner = obj.getString("match_banner");
-                        String no_of_player = obj.getString("no_of_player");
+                        for (int i = 0; i < response.length(); i++) {
+                            JSONObject obj = response.getJSONObject(i);
 
-                        TournamentMatchesItem item = new TournamentMatchesItem(
-                                banner, matchName, matchTime, entryFee, winPrize, perKill, type, "1", map, no_of_player
-                        );
-                        matchesItemList.add(item);
+                            // Parse JSON fields, including m_id
+                            int id = obj.getInt("m_id"); // Map to m_id
+                            String matchName = obj.getString("match_name");
+                            String matchTime = obj.getString("match_time");
+                            int entryFee = obj.getInt("entry_fee");
+                            int winPrize = obj.getInt("win_prize");
+                            int perKill = obj.getInt("per_kill");
+                            String type = obj.getString("type");
+                            String map = obj.getString("MAP");
+                            String banner = obj.getString("match_banner");
+                            String noOfPlayer = obj.getString("no_of_player");
+                            String version = obj.optString("match_type", "TPP"); // Default to TPP
 
+                            // Create TournamentMatchesItem with id
+                            TournamentMatchesItem item = new TournamentMatchesItem(
+                                    id, banner, matchName, matchTime, entryFee, winPrize, perKill,
+                                    type, version, map, noOfPlayer
+                            );
+                            matchesItemList.add(item);
+                        }
 
+                        // Set up adapter
+                        if (matchesAdapter == null) {
+                            matchesAdapter = new TournamentMatchesAdaptor(matchesItemList);
+                            matchesRecyclerView.setAdapter(matchesAdapter);
+                        } else {
+                            matchesAdapter.notifyDataSetChanged();
+                        }
+
+                        // Update UI
+                        loadinganim.setVisibility(View.GONE);
+                        matchesRecyclerView.setVisibility(View.VISIBLE);
+
+                    } catch (JSONException e) {
+                        e.printStackTrace();
+                        Toast.makeText(TournamentMatchesActivity.this, "Error parsing data", Toast.LENGTH_SHORT).show();
                     }
-                    // ✅ Now set the adapter only once
-                    matchesAdapter = new TournamentMatchesAdaptor(matchesItemList);
-                    matchesRecyclerView.setAdapter(matchesAdapter);
-                    matchesAdapter.notifyDataSetChanged();
+                },
+                error -> {
+                    error.printStackTrace();
+                    Toast.makeText(TournamentMatchesActivity.this, "Failed to fetch tournament list", Toast.LENGTH_SHORT).show();
                     loadinganim.setVisibility(View.GONE);
-                    matchesRecyclerView.setVisibility(View.VISIBLE);
-                    System.out.println(data);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    Toast.makeText(TournamentMatchesActivity.this, e.getMessage(), Toast.LENGTH_SHORT).show();
-                    System.out.println(data);
-                }
-            }
+                });
 
-            @Override
-            protected String doInBackground(String... params) {
-                String furl = params[0];
-                try {
-                    URL url = new URL(furl);
-                    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                    BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream()));
-                    return br.readLine();
-                } catch (Exception ex) {
-                    return ex.getMessage();
-                }
-            }
-        }
-
-        dbprocess obj = new dbprocess();
-        obj.execute(finalget_user_data_qry);
+        queue.add(request);
     }
 
     @Override
     public boolean onSupportNavigateUp() {
         onBackPressed();
         return true;
-    }
-
-    public void goto_matchejoin(View view){
-        Intent intent = new Intent(TournamentMatchesActivity.this, TournamentMatchesActivity.class);
     }
 }
